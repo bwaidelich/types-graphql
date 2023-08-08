@@ -16,6 +16,7 @@ use Wwwision\Types\Attributes\Description;
 use Wwwision\Types\Parser;
 use Wwwision\Types\Schema\EnumSchema;
 use Wwwision\Types\Schema\IntegerSchema;
+use Wwwision\Types\Schema\InterfaceSchema;
 use Wwwision\Types\Schema\ListSchema;
 use Wwwision\Types\Schema\LiteralBooleanSchema;
 use Wwwision\Types\Schema\LiteralIntegerSchema;
@@ -43,6 +44,7 @@ use Wwwision\TypesGraphQL\Types\EnumValueDefinitions;
 use Wwwision\TypesGraphQL\Types\FieldDefinition;
 use Wwwision\TypesGraphQL\Types\FieldDefinitions;
 use Wwwision\TypesGraphQL\Types\FieldType;
+use Wwwision\TypesGraphQL\Types\InterfaceDefinition;
 use Wwwision\TypesGraphQL\Types\ObjectTypeDefinition;
 use Wwwision\TypesGraphQL\Types\RootLevelDefinition;
 use Wwwision\TypesGraphQL\Types\RootLevelDefinitions;
@@ -84,7 +86,7 @@ final class GraphQLGenerator
             foreach ($reflectionMethod->getParameters() as $reflectionParameter) {
                 $parameterReflectionType = $reflectionParameter->getType();
                 Assert::isInstanceOf($parameterReflectionType, ReflectionNamedType::class);
-                $parameterSchema = $this->reflectionTypeToSchema($parameterReflectionType);
+                $parameterSchema = self::reflectionTypeToSchema($parameterReflectionType);
                 $argumentTypeDefinition = $this->typeDefinition($parameterSchema, true);
 
                 $argumentDefaultValue = null;
@@ -104,7 +106,7 @@ final class GraphQLGenerator
             $returnType = $reflectionMethod->getReturnType();
             Assert::notNull($returnType, sprintf('Return type of method "%s" is missing', $reflectionMethod->getName()));
             Assert::isInstanceOf($returnType, ReflectionNamedType::class, sprintf('Return type of method "%s" was expected to be of type %%2$s. Got: %%s', $reflectionMethod->getName()));
-            $returnTypeSchema = $this->reflectionTypeToSchema($returnType);
+            $returnTypeSchema = self::reflectionTypeToSchema($returnType);
             $returnTypeDefinition = $this->typeDefinition($returnTypeSchema, false);
 
             $fieldDefinition = new FieldDefinition(
@@ -158,7 +160,7 @@ final class GraphQLGenerator
         return new GraphQLSchema(new RootLevelDefinitions(...$rootLevelDefinitions));
     }
 
-    private function reflectionTypeToSchema(ReflectionNamedType $reflectionType): Schema
+    private static function reflectionTypeToSchema(ReflectionNamedType $reflectionType): Schema
     {
         if ($reflectionType->isBuiltin()) {
             return match ($reflectionType->getName()) {
@@ -188,6 +190,7 @@ final class GraphQLGenerator
                 LiteralIntegerSchema::class,
                 LiteralStringSchema::class => $this->scalarDefinition($schema),
                 ShapeSchema::class => $this->shapeDefinition($schema, $isInputType),
+                InterfaceSchema::class => $this->interfaceDefinition($schema),
                 default => throw new RuntimeException(sprintf('Unsupported schema "%s" for type "%s"', get_debug_type($schema), $schema->getName()))
             };
         }
@@ -232,7 +235,40 @@ final class GraphQLGenerator
 
     private function shapeDefinition(ShapeSchema $schema, bool $isInputType): ObjectTypeDefinition
     {
-        $directives = null;
+        $fieldDefinitions = $this->propertyFieldDefinitions($schema, $isInputType);
+        if ($fieldDefinitions === []) {
+            throw new InvalidArgumentException(sprintf('Missing field definitions for "%s"', $schema->getName()));
+        }
+        return new ObjectTypeDefinition(
+            name: $schema->getName() . ($isInputType ? 'Input' : ''),
+            fieldDefinitions: new FieldDefinitions(...$fieldDefinitions),
+            isInputType: $isInputType
+        );
+    }
+
+    private function interfaceDefinition(InterfaceSchema $schema): InterfaceDefinition
+    {
+        foreach ($schema->implementationSchemas() as $implementationSchema) {
+            $implementationDefinition = $this->typeDefinition($implementationSchema, false);
+            Assert::isInstanceOf($implementationDefinition, ObjectTypeDefinition::class);
+            $implementationDefinition->implementsInterface($schema->getName());
+        }
+        $fieldDefinitions = $this->propertyFieldDefinitions($schema, false);
+        if ($fieldDefinitions === []) {
+            throw new InvalidArgumentException(sprintf('Missing field definitions for "%s"', $schema->getName()));
+        }
+        return new InterfaceDefinition(
+            name: $schema->getName(),
+            fieldDefinitions: new FieldDefinitions(...$fieldDefinitions),
+            description: $schema->description,
+        );
+    }
+
+    /**
+     * @return array<FieldDefinition>
+     */
+    private function propertyFieldDefinitions(ShapeSchema|InterfaceSchema $schema, bool $isInputType): array
+    {
         $fieldDefinitions = [];
         foreach ($schema->propertySchemas as $propertyName => $propertySchema) {
             $required = true;
@@ -240,11 +276,7 @@ final class GraphQLGenerator
                 $propertySchema = $propertySchema->wrapped;
                 $required = false;
             }
-            if (
-                $propertySchema instanceof LiteralBooleanSchema
-                || $propertySchema instanceof LiteralIntegerSchema
-                || $propertySchema instanceof LiteralStringSchema
-            ) {
+            if ($propertySchema instanceof LiteralBooleanSchema || $propertySchema instanceof LiteralIntegerSchema || $propertySchema instanceof LiteralStringSchema) {
                 $propertyFieldType = new FieldType($this->literalTypeName($propertySchema), $required);
             } elseif ($propertySchema instanceof ListSchema) {
                 $propertyTypeDefinition = $this->typeDefinition($propertySchema->itemSchema, $isInputType);
@@ -265,12 +297,7 @@ final class GraphQLGenerator
                 argumentDefinitions: null // TODO support argument fields?
             );
         }
-        return new ObjectTypeDefinition(
-            name: $schema->getName() . ($isInputType ? 'Input' : ''),
-            fieldDefinitions: new FieldDefinitions(...$fieldDefinitions),
-            directives: $directives,
-            isInputType: $isInputType
-        );
+        return $fieldDefinitions;
     }
 
     private function directives(Schema $schema): ?Directives

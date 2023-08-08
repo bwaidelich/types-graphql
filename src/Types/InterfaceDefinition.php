@@ -4,24 +4,14 @@ declare(strict_types=1);
 
 namespace Wwwision\TypesGraphQL\Types;
 
-final class ObjectTypeDefinition implements RootLevelDefinition
+final class InterfaceDefinition implements RootLevelDefinition
 {
-    /**
-     * @param array<string> $implementsInterfaces
-     */
     public function __construct(
         public readonly string $name,
         public readonly FieldDefinitions $fieldDefinitions,
         public readonly ?string $description = null,
         public readonly ?Directives $directives = null,
-        public readonly bool $isInputType = false,
-        private array $implementsInterfaces = [],
     ) {
-    }
-
-    public function implementsInterface(string $interfaceName): void
-    {
-        $this->implementsInterfaces[] = $interfaceName;
     }
 
     public function getName(): string
@@ -35,11 +25,7 @@ final class ObjectTypeDefinition implements RootLevelDefinition
         if ($this->description !== null) {
             $result .= "\"\"\" $this->description \"\"\"\n";
         }
-        $type = $this->isInputType ? 'input' : 'type';
-        $result .= "$type $this->name";
-        if ($this->implementsInterfaces !== []) {
-            $result .= " implements " . implode(' & ', $this->implementsInterfaces);
-        }
+        $result .= "interface $this->name";
         if ($this->directives !== null) {
             $result .= ' ' . $this->directives->render();
         }
