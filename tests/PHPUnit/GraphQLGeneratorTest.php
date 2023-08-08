@@ -30,9 +30,11 @@ use Wwwision\TypesGraphQL\Types\EnumValueDefinitions;
 use Wwwision\TypesGraphQL\Types\FieldDefinition;
 use Wwwision\TypesGraphQL\Types\FieldDefinitions;
 use Wwwision\TypesGraphQL\Types\FieldType;
+use Wwwision\TypesGraphQL\Types\InterfaceDefinition;
 use Wwwision\TypesGraphQL\Types\ObjectTypeDefinition;
 use Wwwision\TypesGraphQL\Types\RootLevelDefinitions;
 use Wwwision\TypesGraphQL\Types\ScalarTypeDefinition;
+use function Wwwision\Types\instantiate;
 
 #[CoversClass(GraphQLGenerator::class)]
 #[CoversClass(GraphQLSchema::class)]
@@ -54,6 +56,7 @@ use Wwwision\TypesGraphQL\Types\ScalarTypeDefinition;
 #[CoversClass(FieldDefinition::class)]
 #[CoversClass(FieldType::class)]
 #[CoversClass(ScalarTypeDefinition::class)]
+#[CoversClass(InterfaceDefinition::class)]
 final class GraphQLGeneratorTest extends TestCase
 {
 
@@ -110,6 +113,7 @@ final class GraphQLGeneratorTest extends TestCase
               """ Some query description """
               someQuery(numbers: [SomeNumber!] @constraint(minItems: 1 maxItems: 5)): Date!
               someOtherQuery(theTitle: Title!): Severity
+              instruments: [Instrument!]!
             }
             
             type Mutation {
@@ -147,6 +151,22 @@ final class GraphQLGeneratorTest extends TestCase
               LOW
               MEDIUM
               HIGH
+            }
+            
+            type Piano implements Instrument {
+              name: String!
+              keys: Int!
+            }
+            
+            type Guitar implements Instrument {
+              name: String!
+              strings: Int!
+            }
+            
+            """ Interface description """
+            interface Instrument {
+              """ Interface property description """
+              name: String!
             }
             
             input SomeOtherShapeInput {
@@ -220,6 +240,12 @@ final class ClassWithQueriesAndMutations {
     {
     }
 
+    #[Query]
+    public function instruments(): Instruments
+    {
+        return instantiate(SomeNumbersOrStrings::class, [['__type' => SomeNumber::class, '__value' => 123], ['__type' => SomeString::class, '__value' => 'foo']]);
+    }
+
     #[Mutation]
     #[Description('Some mutation description')]
     public function someMutation(SomeShape $shape, bool $optionalBool = true): ?SomeNumbers
@@ -273,4 +299,42 @@ enum Severity: int {
     case LOW = 0;
     case MEDIUM = 1;
     case HIGH = 3;
+}
+
+#[Description('Interface description')]
+interface Instrument {
+    #[Description('Interface property description')]
+    public function name(): string;
+}
+
+final class Piano implements Instrument {
+
+    public function __construct(
+        private readonly string $name,
+        public readonly int $keys,
+    ) {}
+
+    public function name(): string {
+        return $this->name;
+    }
+}
+
+final class Guitar implements Instrument
+{
+
+    public function __construct(
+        private readonly string $name,
+        public readonly int $strings,
+    ) {}
+
+    public function name(): string {
+        return $this->name;
+    }
+}
+
+
+#[ListBased(itemClassName: Instrument::class, minCount: 0, maxCount: 5)]
+final class Instruments
+{
+    private function __construct(private readonly array $instruments) {}
 }
