@@ -254,9 +254,6 @@ final class GraphQLGenerator
             $implementationDefinition->implementsInterface($schema->getName());
         }
         $fieldDefinitions = $this->propertyFieldDefinitions($schema, false);
-        if ($fieldDefinitions === []) {
-            throw new InvalidArgumentException(sprintf('Missing field definitions for "%s"', $schema->getName()));
-        }
         return new InterfaceDefinition(
             name: $schema->getName(),
             fieldDefinitions: new FieldDefinitions(...$fieldDefinitions),
