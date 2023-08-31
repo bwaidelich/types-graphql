@@ -98,6 +98,13 @@ final class GraphQLGeneratorTest extends TestCase
         $this->generator->generate(ClassWithInvalidQueryParameterDefaultValue::class);
     }
 
+    public function test_generate_throws_exception_for_class_without_fields(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Missing field definitions for "ClassWithoutPublicProperties"');
+        $this->generator->generate(ClassWithQueryAndInvalidType::class)->render();
+    }
+
     public function test_complex_schema(): void
     {
         $graphQLSchema = $this->generator->generate(ClassWithQueriesAndMutations::class);
@@ -227,6 +234,13 @@ final class ClassWithInvalidQueryParameterDefaultValue {
     }
 }
 
+final class ClassWithQueryAndInvalidType {
+    #[Query]
+    public function someQuery(SomeOtherShape $in): ClassInvalidProperty
+    {
+    }
+}
+
 final class ClassWithQueriesAndMutations {
 
     #[Query]
@@ -337,4 +351,14 @@ final class Guitar implements Instrument
 final class Instruments
 {
     private function __construct(private readonly array $instruments) {}
+}
+
+final class ClassInvalidProperty {
+    public function __construct(
+        ClassWithoutPublicProperties $invalidProperty,
+    ) {}
+}
+
+final class ClassWithoutPublicProperties {
+    public function __construct() {}
 }
