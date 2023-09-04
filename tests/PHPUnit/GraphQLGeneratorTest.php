@@ -192,8 +192,6 @@ final class GraphQLGeneratorTest extends TestCase
               nestedShape: SomeOtherShapeInput
             }
             
-            scalar Boolean
-
             GRAPHQL;
         self::assertSame($expected, $graphQLSchema->render());
     }

@@ -33,8 +33,6 @@ $schema = $generator->generate(SomeApi::class)->render();
 assert($schema === 'type Query {
   ping(input: String!): String!
 }
-
-scalar String
 ');
 ```
 
@@ -189,8 +187,6 @@ input ContactInput {
   """ Whether the contact is registered or not """
   isRegistered: Boolean
 }
-
-scalar Boolean
 
 GRAPHQL;
 

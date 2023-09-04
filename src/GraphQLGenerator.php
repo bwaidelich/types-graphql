@@ -181,20 +181,21 @@ final class GraphQLGenerator
             $schema = $schema->itemSchema;
         }
         $cacheId = $schema->getName() . ($schema instanceof ShapeSchema && $isInputType ? 'Input' : '');
-        if (!array_key_exists($cacheId, $this->createdDefinitions)) {
-            $this->createdDefinitions[$cacheId] = match ($schema::class) {
-                EnumSchema::class => $this->enumDefinition($schema),
-                IntegerSchema::class,
-                StringSchema::class,
-                LiteralBooleanSchema::class,
-                LiteralIntegerSchema::class,
-                LiteralStringSchema::class => $this->scalarDefinition($schema),
-                ShapeSchema::class => $this->shapeDefinition($schema, $isInputType),
-                InterfaceSchema::class => $this->interfaceDefinition($schema),
-                default => throw new RuntimeException(sprintf('Unsupported schema "%s" for type "%s"', get_debug_type($schema), $schema->getName()))
-            };
+        $definition = match ($schema::class) {
+            EnumSchema::class => $this->enumDefinition($schema),
+            IntegerSchema::class,
+            StringSchema::class,
+            LiteralBooleanSchema::class,
+            LiteralIntegerSchema::class,
+            LiteralStringSchema::class => $this->scalarDefinition($schema),
+            ShapeSchema::class => $this->shapeDefinition($schema, $isInputType),
+            InterfaceSchema::class => $this->interfaceDefinition($schema),
+            default => throw new RuntimeException(sprintf('Unsupported schema "%s" for type "%s"', get_debug_type($schema), $schema->getName()))
+        };
+        if (!array_key_exists($cacheId, $this->createdDefinitions) && !in_array($schema::class, [LiteralBooleanSchema::class, LiteralIntegerSchema::class, LiteralStringSchema::class], true)) {
+            $this->createdDefinitions[$cacheId] = $definition;
         }
-        return $this->createdDefinitions[$cacheId];
+        return $definition;
     }
 
     private function scalarDefinition(IntegerSchema|StringSchema|LiteralBooleanSchema|LiteralIntegerSchema|LiteralStringSchema $schema): ScalarTypeDefinition
