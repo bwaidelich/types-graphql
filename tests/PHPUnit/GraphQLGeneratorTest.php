@@ -5,7 +5,9 @@ namespace Wwwision\TypesGraphQL\Tests\PHPUnit;
 
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 use Wwwision\Types\Attributes\Description;
 use Wwwision\Types\Attributes\IntegerBased;
 use Wwwision\Types\Attributes\ListBased;
@@ -20,6 +22,8 @@ use Wwwision\TypesGraphQL\Types\ArgumentDefinition;
 use Wwwision\TypesGraphQL\Types\ArgumentDefinitions;
 use Wwwision\TypesGraphQL\Types\Arguments;
 use Wwwision\TypesGraphQL\Types\ArgumentValue;
+use Wwwision\TypesGraphQL\Types\CustomResolver;
+use Wwwision\TypesGraphQL\Types\CustomResolvers;
 use Wwwision\TypesGraphQL\Types\Directive;
 use Wwwision\TypesGraphQL\Types\DirectiveDefinition;
 use Wwwision\TypesGraphQL\Types\DirectiveLocations;
@@ -57,6 +61,8 @@ use function Wwwision\Types\instantiate;
 #[CoversClass(FieldType::class)]
 #[CoversClass(ScalarTypeDefinition::class)]
 #[CoversClass(InterfaceDefinition::class)]
+#[CoversClass(CustomResolvers::class)]
+#[CoversClass(CustomResolver::class)]
 final class GraphQLGeneratorTest extends TestCase
 {
 
@@ -94,7 +100,7 @@ final class GraphQLGeneratorTest extends TestCase
     public function test_generate_throws_exception_parameter_default_value_type_is_not_supported(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('The default value of parameter "dateTimeImmutable" for method "ping" has to be of type bool, float, int, string or Stringable. Got: DateTimeImmutable');
+        $this->expectExceptionMessage('Failed to parse method "ping" of type "ClassWithInvalidQueryParameterDefaultValue": The default value of parameter "dateTimeImmutable" has to be of type bool, float, int, string or Stringable. Got: DateTimeImmutable');
         $this->generator->generate(ClassWithInvalidQueryParameterDefaultValue::class);
     }
 
@@ -191,7 +197,64 @@ final class GraphQLGeneratorTest extends TestCase
               date: Date
               nestedShape: SomeOtherShapeInput
             }
+
+            GRAPHQL;
+        self::assertSame($expected, $graphQLSchema->render());
+    }
+
+    public static function dataProvider_invalid_custom_resolvers(): iterable
+    {
+        yield 'missing first parameter' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (): bool => true), 'expectedException' => 'Custom resolver "custom" for type "SomeOtherShape" must expect an instance of SomeOtherShape as first argument, but the resolver has no arguments'];
+        yield 'invalid first parameter type (simple type)' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (int $x): string => 'foo'), 'expectedException' => 'Custom resolver "custom" for type "SomeOtherShape" must expect an instance of SomeOtherShape as first argument, but the first argument is of type int'];
+        yield 'invalid first parameter type (stdClass)' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (stdClass $title): string => $title->name), 'expectedException' => 'Failed to parse schema of first argument of custom resolver "custom" for type "SomeOtherShape": Missing constructor in class "stdClass"'];
+        yield 'invalid first parameter type (nonexisting class)' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (\NonExistingClass $title): string => $title->name), 'expectedException' => 'Failed to parse schema of first argument of custom resolver "custom" for type "SomeOtherShape": Failed to get schema for class "NonExistingClass" because that class does not exist'];
+        yield 'invalid first parameter type (existing class)' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (Title $title): string => $title->name), 'expectedException' => 'Custom resolver "custom" for type "SomeOtherShape" must expect an instance of SomeOtherShape as first argument, but the first argument is of type Title'];
+        yield 'invalid first parameter type (union type)' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (string|int $title): int => 321), 'expectedException' => 'Custom resolver "custom" for type "SomeOtherShape" must expect an instance of SomeOtherShape as first argument, got ReflectionUnionType'];
+        yield 'invalid 2nd parameter type (union type)' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (SomeOtherShape $shape, string|int $foo): int => 321), 'expectedException' => 'Failed to parse argument of custom resolver "custom" for type "SomeOtherShape": Expected an instance of ReflectionNamedType. Got: ReflectionUnionType'];
+        yield 'missing return type' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (SomeOtherShape $shape) => 123), 'expectedException' => 'Return type of custom resolver "custom" for type "SomeOtherShape" is missing'];
+        yield 'invalid return type (union type)' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (SomeOtherShape $shape): string|int => 123), 'expectedException' => 'Return type of custom resolver "custom" for type "SomeOtherShape" was expected to be of type ReflectionNamedType. Got: ReflectionUnionType'];
+    }
+
+    #[dataProvider('dataProvider_invalid_custom_resolvers')]
+    public function test_invalid_custom_resolver(CustomResolver $customResolver, string $expectedException): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage($expectedException);
+        $this->generator->generate(ClassWithQueries::class, CustomResolvers::create($customResolver));
+    }
+
+    public function test_custom_resolvers(): void
+    {
+        $customResolvers = CustomResolvers::create(
+            new CustomResolver('SomeOtherShape', 'custom', fn (SomeOtherShape $shape): string => $shape->title->name, 'Some custom resolver description'),
+            new CustomResolver('SomeOtherShape', 'customWithArguments', fn (SomeOtherShape $x, string $foo): bool => $foo === 'test'),
+            new CustomResolver('SomeOtherShape', 'customWithObjectArguments', fn (SomeOtherShape $x, Title $title): Title => $title),
+        );
+        $graphQLSchema = $this->generator->generate(ClassWithQueries::class, $customResolvers);
+
+        $expected = <<<GRAPHQL
+            type Query {
+              someQuery(in: SomeOtherShapeInput!): SomeOtherShape!
+            }
             
+            enum Title {
+              MR
+              MRS
+              OTHER
+            }
+            
+            input SomeOtherShapeInput {
+              title: Title!
+            }
+            
+            type SomeOtherShape {
+              title: Title!
+              """ Some custom resolver description """
+              custom: String!
+              customWithArguments(foo: String!): Boolean!
+              customWithObjectArguments(title: Title!): Title!
+            }
+
             GRAPHQL;
         self::assertSame($expected, $graphQLSchema->render());
     }
@@ -235,6 +298,21 @@ final class ClassWithInvalidQueryParameterDefaultValue {
 final class ClassWithQueryAndInvalidType {
     #[Query]
     public function someQuery(SomeOtherShape $in): ClassInvalidProperty
+    {
+    }
+}
+
+final class ClassWithQueryAndInvalidInterfaceType {
+    #[Query]
+    public function someQuery(SomeOtherShape $in): ClassInvalidInterfaceProperty
+    {
+    }
+}
+
+final class ClassWithQueries {
+
+    #[Query]
+    public function someQuery(SomeOtherShape $in): SomeOtherShape
     {
     }
 }

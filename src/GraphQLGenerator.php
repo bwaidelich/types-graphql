@@ -7,8 +7,10 @@ namespace Wwwision\TypesGraphQL;
 use InvalidArgumentException;
 use ReflectionAttribute;
 use ReflectionClass;
+use ReflectionFunction;
 use ReflectionMethod;
 use ReflectionNamedType;
+use ReflectionParameter;
 use RuntimeException;
 use Stringable;
 use Webmozart\Assert\Assert;
@@ -33,6 +35,7 @@ use Wwwision\TypesGraphQL\Types\ArgumentDefinition;
 use Wwwision\TypesGraphQL\Types\ArgumentDefinitions;
 use Wwwision\TypesGraphQL\Types\Arguments;
 use Wwwision\TypesGraphQL\Types\ArgumentValue;
+use Wwwision\TypesGraphQL\Types\CustomResolvers;
 use Wwwision\TypesGraphQL\Types\Directive;
 use Wwwision\TypesGraphQL\Types\DirectiveDefinition;
 use Wwwision\TypesGraphQL\Types\DirectiveLocation;
@@ -60,15 +63,18 @@ final class GraphQLGenerator
      */
     private array $createdDefinitions = [];
 
+    private CustomResolvers $customResolvers;
+
     private bool $constraintDirectivesWhereAdded = false;
 
     public function __construct()
     {
     }
 
-    public function generate(string $className): GraphQLSchema
+    public function generate(string $className, CustomResolvers $customResolvers = null): GraphQLSchema
     {
         $this->createdDefinitions = [];
+        $this->customResolvers = $customResolvers ?? CustomResolvers::create();
         $this->constraintDirectivesWhereAdded = false;
         Assert::classExists($className);
         $reflectionClass = new ReflectionClass($className);
@@ -82,38 +88,20 @@ final class GraphQLGenerator
             if ($graphQLEndpointAttribute === null) {
                 continue;
             }
-            $argumentDefinitions = [];
-            foreach ($reflectionMethod->getParameters() as $reflectionParameter) {
-                $parameterReflectionType = $reflectionParameter->getType();
-                Assert::isInstanceOf($parameterReflectionType, ReflectionNamedType::class);
-                $parameterSchema = self::reflectionTypeToSchema($parameterReflectionType);
-                $argumentTypeDefinition = $this->typeDefinition($parameterSchema, true);
-
-                $argumentDefaultValue = null;
-                if ($reflectionParameter->isDefaultValueAvailable() && $reflectionParameter->getDefaultValue() !== null) {
-                    $argumentDefaultValue = $reflectionParameter->getDefaultValue();
-                    if (!is_bool($argumentDefaultValue) && !is_float($argumentDefaultValue) && !is_int($argumentDefaultValue) && !is_string($argumentDefaultValue)) {
-                        Assert::isInstanceOf($argumentDefaultValue, Stringable::class, sprintf('The default value of parameter "%s" for method "%s" has to be of type bool, float, int, string or Stringable. Got: %%s', $reflectionParameter->getName(), $reflectionMethod->getName()));
-                    }
-                }
-                $argumentDefinitions[] = new ArgumentDefinition(
-                    name: $reflectionParameter->getName(),
-                    type: new FieldType($argumentTypeDefinition->getName(), !$reflectionParameter->isOptional(), $parameterSchema instanceof ListSchema),
-                    defaultValue: $argumentDefaultValue !== null ? new ArgumentValue($argumentDefaultValue) : null,
-                    directives: $this->directives($parameterSchema),
-                );
-            }
             $returnType = $reflectionMethod->getReturnType();
             Assert::notNull($returnType, sprintf('Return type of method "%s" is missing', $reflectionMethod->getName()));
             Assert::isInstanceOf($returnType, ReflectionNamedType::class, sprintf('Return type of method "%s" was expected to be of type %%2$s. Got: %%s', $reflectionMethod->getName()));
-            $returnTypeSchema = self::reflectionTypeToSchema($returnType);
-            $returnTypeDefinition = $this->typeDefinition($returnTypeSchema, false);
 
+            try {
+                $argumentDefinitions = $this->argumentDefinitionsFromReflectionParameters($reflectionMethod->getParameters());
+            } catch (InvalidArgumentException $exception) {
+                throw new InvalidArgumentException(sprintf('Failed to parse method "%s" of type "%s": %s', $reflectionMethod->getName(), $reflectionClass->getShortName(), $exception->getMessage()), 1693477914, $exception);
+            }
             $fieldDefinition = new FieldDefinition(
                 name: $reflectionMethod->getName(),
-                type: new FieldType($returnTypeDefinition->getName(), !$returnType->allowsNull(), $returnTypeSchema instanceof ListSchema),
+                type: $this->fieldTypeFromReflectionReturnType($returnType),
                 description: self::getMethodDescription($reflectionMethod),
-                argumentDefinitions: $argumentDefinitions !== [] ? new ArgumentDefinitions(...$argumentDefinitions) : null,
+                argumentDefinitions: $argumentDefinitions,
             );
             if ($graphQLEndpointAttribute->getName() === Query::class) {
                 $queryFieldDefinitions[] = $fieldDefinition;
@@ -158,6 +146,46 @@ final class GraphQLGenerator
         }
         $rootLevelDefinitions = [...$rootLevelDefinitions, ...$this->createdDefinitions];
         return new GraphQLSchema(new RootLevelDefinitions(...$rootLevelDefinitions));
+    }
+
+    private function fieldTypeFromReflectionReturnType(ReflectionNamedType $reflectionReturnType): FieldType
+    {
+        $returnTypeSchema = self::reflectionTypeToSchema($reflectionReturnType);
+        $returnTypeDefinition = $this->typeDefinition($returnTypeSchema, false);
+        return new FieldType($returnTypeDefinition->getName(), !$reflectionReturnType->allowsNull(), $returnTypeSchema instanceof ListSchema);
+    }
+
+    /**
+     * @param array<ReflectionParameter> $reflectionParameters
+     * @return ArgumentDefinitions|null
+     */
+    private function argumentDefinitionsFromReflectionParameters(array $reflectionParameters): ?ArgumentDefinitions
+    {
+        $argumentDefinitions = [];
+        foreach ($reflectionParameters as $reflectionParameter) {
+            $parameterReflectionType = $reflectionParameter->getType();
+            Assert::isInstanceOf($parameterReflectionType, ReflectionNamedType::class);
+            $parameterSchema = self::reflectionTypeToSchema($parameterReflectionType);
+            $argumentTypeDefinition = $this->typeDefinition($parameterSchema, true);
+
+            $argumentDefaultValue = null;
+            if ($reflectionParameter->isDefaultValueAvailable() && $reflectionParameter->getDefaultValue() !== null) {
+                $argumentDefaultValue = $reflectionParameter->getDefaultValue();
+                if (!is_bool($argumentDefaultValue) && !is_float($argumentDefaultValue) && !is_int($argumentDefaultValue) && !is_string($argumentDefaultValue)) {
+                    Assert::isInstanceOf($argumentDefaultValue, Stringable::class, sprintf('The default value of parameter "%s" has to be of type bool, float, int, string or Stringable. Got: %%s', $reflectionParameter->getName()));
+                }
+            }
+            $argumentDefinitions[] = new ArgumentDefinition(
+                name: $reflectionParameter->getName(),
+                type: new FieldType($argumentTypeDefinition->getName(), !$reflectionParameter->isOptional(), $parameterSchema instanceof ListSchema),
+                defaultValue: $argumentDefaultValue !== null ? new ArgumentValue($argumentDefaultValue) : null,
+                directives: $this->directives($parameterSchema),
+            );
+        }
+        if ($argumentDefinitions === []) {
+            return null;
+        }
+        return new ArgumentDefinitions(...$argumentDefinitions);
     }
 
     private static function reflectionTypeToSchema(ReflectionNamedType $reflectionType): Schema
@@ -236,12 +264,46 @@ final class GraphQLGenerator
 
     private function shapeDefinition(ShapeSchema $schema, bool $isInputType): ObjectTypeDefinition
     {
+        $typeName = $schema->getName() . ($isInputType ? 'Input' : '');
         $fieldDefinitions = $this->propertyFieldDefinitions($schema, $isInputType);
+        foreach ($this->customResolvers->getAllForType($typeName) as $customResolver) {
+            $customResolverReflection = new ReflectionFunction($customResolver->callback);
+            $customResolverParameters = $customResolverReflection->getParameters();
+            Assert::keyExists($customResolverParameters, 0, sprintf('Custom resolver "%s" for type "%s" must expect an instance of %s as first argument, but the resolver has no arguments', $customResolver->fieldName, $customResolver->typeName, $schema->getName()));
+            $customResolverFirstParameterReflectionType = $customResolverParameters[0]->getType();
+            Assert::isInstanceOf($customResolverFirstParameterReflectionType, ReflectionNamedType::class, sprintf('Custom resolver "%s" for type "%s" must expect an instance of %s as first argument, got %%s', $customResolver->fieldName, $customResolver->typeName, $schema->getName()));
+            if ($customResolverFirstParameterReflectionType->isBuiltin()) {
+                throw new InvalidArgumentException(sprintf('Custom resolver "%s" for type "%s" must expect an instance of %s as first argument, but the first argument is of type %s', $customResolver->fieldName, $customResolver->typeName, $schema->getName(), $customResolverFirstParameterReflectionType->getName()), 1693474790);
+            }
+            /** @var class-string $customResolverFirstParameterClassName */
+            $customResolverFirstParameterClassName = $customResolverFirstParameterReflectionType->getName();
+            try {
+                $customResolverFirstParameterSchema = Parser::getSchema($customResolverFirstParameterClassName);
+            } catch (InvalidArgumentException $exception) {
+                throw new InvalidArgumentException(sprintf('Failed to parse schema of first argument of custom resolver "%s" for type "%s": %s', $customResolver->fieldName, $customResolver->typeName, $exception->getMessage()), 1693475021);
+            }
+            Assert::same($customResolverFirstParameterSchema->getName(), $schema->getName(), sprintf('Custom resolver "%s" for type "%s" must expect an instance of %s as first argument, but the first argument is of type %s', $customResolver->fieldName, $customResolver->typeName, $schema->getName(), $customResolverFirstParameterSchema->getName()));
+            array_shift($customResolverParameters);
+            $customResolverReturnType = $customResolverReflection->getReturnType();
+            Assert::notNull($customResolverReturnType, sprintf('Return type of custom resolver "%s" for type "%s" is missing', $customResolver->fieldName, $customResolver->typeName));
+            Assert::isInstanceOf($customResolverReturnType, ReflectionNamedType::class, sprintf('Return type of custom resolver "%s" for type "%s" was expected to be of type %%2$s. Got: %%s', $customResolver->fieldName, $customResolver->typeName));
+            try {
+                $customResolverArgumentDefinitions = $this->argumentDefinitionsFromReflectionParameters($customResolverParameters);
+            } catch (InvalidArgumentException $exception) {
+                throw new InvalidArgumentException(sprintf('Failed to parse argument of custom resolver "%s" for type "%s": %s', $customResolver->fieldName, $customResolver->typeName, $exception->getMessage()), 1693477576);
+            }
+            $fieldDefinitions[] = new FieldDefinition(
+                name: $customResolver->fieldName,
+                type: $this->fieldTypeFromReflectionReturnType($customResolverReturnType),
+                description: $customResolver->description,
+                argumentDefinitions: $customResolverArgumentDefinitions,
+            );
+        }
         if ($fieldDefinitions === []) {
             throw new InvalidArgumentException(sprintf('Missing field definitions for "%s"', $schema->getName()));
         }
         return new ObjectTypeDefinition(
-            name: $schema->getName() . ($isInputType ? 'Input' : ''),
+            name: $typeName,
             fieldDefinitions: new FieldDefinitions(...$fieldDefinitions),
             isInputType: $isInputType
         );
