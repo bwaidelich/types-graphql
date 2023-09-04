@@ -269,10 +269,10 @@ assert($schema === $expectedSchema);
 
 ### Custom resolvers
 
-With version [1.2.0](https://github.com/bwaidelich/types-graphql/releases/tag/1.2.0) custom closures can be registered that extend the behavior of types dynamically.
+With version [1.2.0](https://github.com/bwaidelich/types-graphql/releases/tag/1.2.0) custom functions can be registered that extend the behavior of types dynamically.
 
 > **Note**
-> The signature of the custom resolver closure has to contain the extended type as first argument, for example: `new CustomResolver('SomeObject', 'someCustomField', fn (SomeObject $thisIsRequired, string $thisIsOptional): bool => true)`
+> The signature of the custom resolver closure has to contain the extended type as first argument and specify the return type, for example: `new CustomResolver('SomeObject', 'someCustomField', fn (SomeObject $thisIsRequired, string $thisIsOptional): bool => true)`
 
 <details>
 <summary><h4>Example: Custom resolvers</h4></summary>
