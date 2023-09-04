@@ -267,6 +267,59 @@ assert($schema === $expectedSchema);
 
 </details>
 
+### Custom resolvers
+
+With version [1.2.0](https://github.com/bwaidelich/types-graphql/releases/tag/1.2.0) custom functions can be registered that extend the behavior of types dynamically.
+
+> **Note**
+> The signature of the custom resolver closure has to contain the extended type as first argument and specify the return type, for example: `new CustomResolver('SomeObject', 'someCustomField', fn (SomeObject $thisIsRequired, string $thisIsOptional): bool => true)`
+
+<details>
+<summary><h4>Example: Custom resolvers</h4></summary>
+
+```php
+final class User {
+    public function __construct(
+        public readonly string $givenName,
+        public readonly string $familyName,
+    ) {}
+}
+
+#[ListBased(itemClassName: User::class)]
+final class Users {
+}
+
+final class SomeApi {
+    #[Query]
+    public function users(): ?Users
+    {
+        // ...
+    }
+}
+
+$generator = new GraphQLGenerator();
+$customResolvers = CustomResolvers::create(new CustomResolver('User', 'fullName', fn (User $user): string => $user->givenName . ' ' . $user->familyName));
+$schema = $generator->generate(SomeApi::class, $customResolvers)->render();
+
+$expectedSchema = <<<GRAPHQL
+type Query {
+  users: [User!]
+}
+
+type User {
+  givenName: String!
+  familyName: String!
+  fullName: String!
+}
+
+GRAPHQL;
+
+assert($schema === $expectedSchema);
+
+```
+
+</details>
+
 ## Contribution
 
 Contributions in the form of [issues](https://github.com/bwaidelich/types-graphql/issues) or [pull requests](https://github.com/bwaidelich/types-graphql/pulls) are highly appreciated

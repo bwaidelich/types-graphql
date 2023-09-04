@@ -57,6 +57,8 @@ final class ReadmeCodeBlockTest extends TestCase
                 use Wwwision\Types\Attributes\StringBased;
                 use Wwwision\Types\Parser;
                 use Wwwision\Types\Schema\StringTypeFormat;
+                use Wwwision\TypesGraphQL\Types\CustomResolver;
+                use Wwwision\TypesGraphQL\Types\CustomResolvers;
                 use function Wwwision\Types\instantiate;
                 $code
             }
