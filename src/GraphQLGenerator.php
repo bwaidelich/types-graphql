@@ -21,6 +21,7 @@ use Wwwision\Types\Schema\IntegerSchema;
 use Wwwision\Types\Schema\InterfaceSchema;
 use Wwwision\Types\Schema\ListSchema;
 use Wwwision\Types\Schema\LiteralBooleanSchema;
+use Wwwision\Types\Schema\LiteralFloatSchema;
 use Wwwision\Types\Schema\LiteralIntegerSchema;
 use Wwwision\Types\Schema\LiteralStringSchema;
 use Wwwision\Types\Schema\OptionalSchema;
@@ -195,6 +196,7 @@ final class GraphQLGenerator
                 'bool' => new LiteralBooleanSchema(null),
                 'int' => new LiteralIntegerSchema(null),
                 'string' => new LiteralStringSchema(null),
+                'float' => new LiteralFloatSchema(null),
                 default => throw new InvalidArgumentException(sprintf('No support for type %s', $reflectionType->getName())),
             };
         }
@@ -215,34 +217,37 @@ final class GraphQLGenerator
             StringSchema::class,
             LiteralBooleanSchema::class,
             LiteralIntegerSchema::class,
-            LiteralStringSchema::class => $this->scalarDefinition($schema),
+            LiteralStringSchema::class,
+            LiteralFloatSchema::class => $this->scalarDefinition($schema),
             ShapeSchema::class => $this->shapeDefinition($schema, $isInputType),
             InterfaceSchema::class => $this->interfaceDefinition($schema),
             default => throw new RuntimeException(sprintf('Unsupported schema "%s" for type "%s"', get_debug_type($schema), $schema->getName()))
         };
-        if (!array_key_exists($cacheId, $this->createdDefinitions) && !in_array($schema::class, [LiteralBooleanSchema::class, LiteralIntegerSchema::class, LiteralStringSchema::class], true)) {
+        if (!array_key_exists($cacheId, $this->createdDefinitions) && !in_array($schema::class, [LiteralBooleanSchema::class, LiteralIntegerSchema::class, LiteralStringSchema::class, LiteralFloatSchema::class], true)) {
             $this->createdDefinitions[$cacheId] = $definition;
         }
         return $definition;
     }
 
-    private function scalarDefinition(IntegerSchema|StringSchema|LiteralBooleanSchema|LiteralIntegerSchema|LiteralStringSchema $schema): ScalarTypeDefinition
+    private function scalarDefinition(IntegerSchema|StringSchema|LiteralBooleanSchema|LiteralIntegerSchema|LiteralStringSchema|LiteralFloatSchema $schema): ScalarTypeDefinition
     {
         $name = match ($schema::class) {
             LiteralBooleanSchema::class,
             LiteralIntegerSchema::class,
-            LiteralStringSchema::class => $this->literalTypeName($schema),
+            LiteralStringSchema::class,
+            LiteralFloatSchema::class => $this->literalTypeName($schema),
             default => $schema->getName(),
         };
         return new ScalarTypeDefinition(name: $name, description: $schema->getDescription(), directives: $this->directives($schema));
     }
 
-    private function literalTypeName(LiteralBooleanSchema|LiteralIntegerSchema|LiteralStringSchema $schema): string
+    private function literalTypeName(LiteralBooleanSchema|LiteralIntegerSchema|LiteralStringSchema|LiteralFloatSchema $schema): string
     {
         return match ($schema::class) {
             LiteralBooleanSchema::class => 'Boolean',
             LiteralIntegerSchema::class => 'Int',
-            LiteralStringSchema::class => 'String'
+            LiteralStringSchema::class => 'String',
+            LiteralFloatSchema::class => 'Float',
         };
     }
 

@@ -227,7 +227,10 @@ final class GraphQLGeneratorTest extends TestCase
     {
         $customResolvers = CustomResolvers::create(
             new CustomResolver('SomeOtherShape', 'custom', fn (SomeOtherShape $shape): string => $shape->title->name, 'Some custom resolver description'),
-            new CustomResolver('SomeOtherShape', 'customWithArguments', fn (SomeOtherShape $x, string $foo): bool => $foo === 'test'),
+            new CustomResolver('SomeOtherShape', 'customWithBoolArgument', fn (SomeOtherShape $x, #[Description('Some custom argument description')] bool $foo): bool => false),
+            new CustomResolver('SomeOtherShape', 'customWithIntArgument', fn (SomeOtherShape $x, #[Description('Some custom argument description')] int $foo): bool => false),
+            new CustomResolver('SomeOtherShape', 'customWithStringArgument', fn (SomeOtherShape $x, #[Description('Some custom argument description')] string $foo): bool => false),
+            new CustomResolver('SomeOtherShape', 'customWithFloatArgument', fn (SomeOtherShape $x, #[Description('Some custom argument description')] float $foo): bool => false),
             new CustomResolver('SomeOtherShape', 'customWithObjectArguments', fn (SomeOtherShape $x, Title $title): Title => $title),
         );
         $graphQLSchema = $this->generator->generate(ClassWithQueries::class, $customResolvers);
@@ -251,7 +254,10 @@ final class GraphQLGeneratorTest extends TestCase
               title: Title!
               """ Some custom resolver description """
               custom: String!
-              customWithArguments(foo: String!): Boolean!
+              customWithBoolArgument(foo: Boolean!): Boolean!
+              customWithIntArgument(foo: Int!): Boolean!
+              customWithStringArgument(foo: String!): Boolean!
+              customWithFloatArgument(foo: Float!): Boolean!
               customWithObjectArguments(title: Title!): Title!
             }
 
