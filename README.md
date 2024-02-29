@@ -41,7 +41,7 @@ assert($schema === 'type Query {
 If you API class refers to more complex types (using attributes from the [wwwision/types](https://github.com/bwaidelich/types) package) in method parameters or return types, they will be added to the schema too.
 
 <details>
-<summary><h4>Example: Advanced types</h4></summary>
+<summary><b>Example: Advanced types</b></summary>
 
 
 1. Given you have the following classes defined:
@@ -203,7 +203,7 @@ that can be interpreted by consumers.
 It also adds the constraint rules to descriptions of the corresponding fields.
 
 <details>
-<summary><h4>Example: Type constraints</h4></summary>
+<summary><b>Example: Type constraints</b></summary>
 
 ```php
 #[StringBased(minLength: 1, maxLength: 200)]
@@ -275,7 +275,7 @@ With version [1.2.0](https://github.com/bwaidelich/types-graphql/releases/tag/1.
 > The signature of the custom resolver closure has to contain the extended type as first argument and specify the return type, for example: `new CustomResolver('SomeObject', 'someCustomField', fn (SomeObject $thisIsRequired, string $thisIsOptional): bool => true)`
 
 <details>
-<summary><h4>Example: Custom resolvers</h4></summary>
+<summary><b>Example: Custom resolvers</b></summary>
 
 ```php
 final class User {
