@@ -111,6 +111,13 @@ final class GraphQLGeneratorTest extends TestCase
         $this->generator->generate(ClassWithQueryAndInvalidType::class)->render();
     }
 
+    public function test_generate_throws_exception_for_class_with_recursive_types(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Recursive field definitions for "ClassWithRecursion"');
+        $this->generator->generate(ClassWithQueryAndRecursiveType::class)->render();
+    }
+
     public function test_complex_schema(): void
     {
         $graphQLSchema = $this->generator->generate(ClassWithQueriesAndMutations::class);
@@ -315,6 +322,13 @@ final class ClassWithQueryAndInvalidInterfaceType {
     }
 }
 
+final class ClassWithQueryAndRecursiveType {
+    #[Query]
+    public function someQuery(SomeOtherShape $in): ClassWithRecursion
+    {
+    }
+}
+
 final class ClassWithQueries {
 
     #[Query]
@@ -443,4 +457,18 @@ final class ClassInvalidProperty {
 
 final class ClassWithoutPublicProperties {
     public function __construct() {}
+}
+
+final class ClassWithRecursion {
+    public function __construct(
+        private readonly string $name,
+        private readonly SubClassWithRecursion $subClass
+    ) {}
+}
+
+final class SubClassWithRecursion {
+    public function __construct(
+        private readonly string $name,
+        private readonly ClassWithRecursion $parentClass
+    ) {}
 }
