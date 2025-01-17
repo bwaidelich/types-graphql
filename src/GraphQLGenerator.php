@@ -388,15 +388,8 @@ final class GraphQLGenerator
     {
         $arguments = [];
         if ($schema->format !== null) {
-            $formatValue = match ($schema->format) {
-                StringTypeFormat::date_time => 'date-time',
-                StringTypeFormat::date => 'date',
-                StringTypeFormat::email => 'email',
-                StringTypeFormat::uri => 'uri',
-                StringTypeFormat::uuid => 'uuid',
-            };
-            $arguments[] = new Argument(name: 'format', value: new ArgumentValue($formatValue));
-            $description .= "* Format: `$formatValue`\n";
+            $arguments[] = new Argument(name: 'format', value: new ArgumentValue($schema->format->name));
+            $description .= "* Format: `{$schema->format->name}`\n";
         }
         if ($schema->pattern !== null) {
             $arguments[] = new Argument(name: 'pattern', value: new ArgumentValue($schema->pattern));
