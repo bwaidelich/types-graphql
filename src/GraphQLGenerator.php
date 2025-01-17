@@ -16,6 +16,7 @@ use Stringable;
 use Webmozart\Assert\Assert;
 use Wwwision\Types\Attributes\Description;
 use Wwwision\Types\Parser;
+use Wwwision\Types\Schema\DeferredSchema;
 use Wwwision\Types\Schema\EnumSchema;
 use Wwwision\Types\Schema\IntegerSchema;
 use Wwwision\Types\Schema\InterfaceSchema;
@@ -37,6 +38,7 @@ use Wwwision\TypesGraphQL\Types\ArgumentDefinitions;
 use Wwwision\TypesGraphQL\Types\Arguments;
 use Wwwision\TypesGraphQL\Types\ArgumentValue;
 use Wwwision\TypesGraphQL\Types\CustomResolvers;
+use Wwwision\TypesGraphQL\Types\DeferredRootLevelDefinition;
 use Wwwision\TypesGraphQL\Types\Directive;
 use Wwwision\TypesGraphQL\Types\DirectiveDefinition;
 use Wwwision\TypesGraphQL\Types\DirectiveLocation;
@@ -210,7 +212,9 @@ final class GraphQLGenerator
         if ($schema instanceof ListSchema) {
             $schema = $schema->itemSchema;
         }
-        $cacheId = $schema->getName() . ($schema instanceof ShapeSchema && $isInputType ? 'Input' : '');
+        if ($schema instanceof DeferredSchema) {
+            return new DeferredRootLevelDefinition(fn () => $this->typeDefinition($schema->resolve(), $isInputType));
+        }
         $definition = match ($schema::class) {
             EnumSchema::class => $this->enumDefinition($schema),
             IntegerSchema::class,
@@ -223,6 +227,7 @@ final class GraphQLGenerator
             InterfaceSchema::class => $this->interfaceDefinition($schema),
             default => throw new RuntimeException(sprintf('Unsupported schema "%s" for type "%s"', get_debug_type($schema), $schema->getName()))
         };
+        $cacheId = $schema->getName() . ($schema instanceof ShapeSchema && $isInputType ? 'Input' : '');
         if (!array_key_exists($cacheId, $this->createdDefinitions) && !in_array($schema::class, [LiteralBooleanSchema::class, LiteralIntegerSchema::class, LiteralStringSchema::class, LiteralFloatSchema::class], true)) {
             $this->createdDefinitions[$cacheId] = $definition;
         }

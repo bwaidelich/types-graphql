@@ -202,6 +202,39 @@ final class GraphQLGeneratorTest extends TestCase
         self::assertSame($expected, $graphQLSchema->render());
     }
 
+    public function test_schema_with_recursive_types(): void
+    {
+        $graphQLSchema = $this->generator->generate(ClassWithQueryAndRecursiveType::class);
+
+        $expected = <<<GRAPHQL
+            type Query {
+              someQuery(in: SomeOtherShapeInput!): ClassWithRecursion!
+            }
+            
+            enum Title {
+              MR
+              MRS
+              OTHER
+            }
+            
+            input SomeOtherShapeInput {
+              title: Title!
+            }
+            
+            type SubClassWithRecursion {
+              name: String!
+              parentClass: ClassWithRecursion!
+            }
+            
+            type ClassWithRecursion {
+              name: String!
+              subClass: SubClassWithRecursion!
+            }
+
+            GRAPHQL;
+        self::assertSame($expected, $graphQLSchema->render());
+    }
+
     public static function dataProvider_invalid_custom_resolvers(): iterable
     {
         yield 'missing first parameter' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (): bool => true), 'expectedException' => 'Custom resolver "custom" for type "SomeOtherShape" must expect an instance of SomeOtherShape as first argument, but the resolver has no arguments'];
@@ -311,6 +344,13 @@ final class ClassWithQueryAndInvalidType {
 final class ClassWithQueryAndInvalidInterfaceType {
     #[Query]
     public function someQuery(SomeOtherShape $in): ClassInvalidInterfaceProperty
+    {
+    }
+}
+
+final class ClassWithQueryAndRecursiveType {
+    #[Query]
+    public function someQuery(SomeOtherShape $in): ClassWithRecursion
     {
     }
 }
@@ -443,4 +483,18 @@ final class ClassInvalidProperty {
 
 final class ClassWithoutPublicProperties {
     public function __construct() {}
+}
+
+final class ClassWithRecursion {
+    public function __construct(
+        private readonly string $name,
+        private readonly SubClassWithRecursion $subClass
+    ) {}
+}
+
+final class SubClassWithRecursion {
+    public function __construct(
+        private readonly string $name,
+        private readonly ClassWithRecursion $parentClass
+    ) {}
 }
