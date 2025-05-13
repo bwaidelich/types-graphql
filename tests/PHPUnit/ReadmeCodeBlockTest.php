@@ -24,6 +24,7 @@ final class ReadmeCodeBlockTest extends TestCase
     public static function code_blocks_dataProvider(): Generator
     {
         $readmeFilePath = realpath(__DIR__ . '/../../README.md');
+        assert(is_string($readmeFilePath));
         $readmeContents = file_get_contents($readmeFilePath);
         if (!is_string($readmeContents)) {
             self::fail(sprintf('Failed to read README file from "%s"', $readmeFilePath));
@@ -38,7 +39,7 @@ final class ReadmeCodeBlockTest extends TestCase
     }
 
     #[DataProvider('code_blocks_dataProvider')]
-    public function test_code_blocks(string $code, int $lineNumber, string $expectedExceptionMessage = null): void
+    public function test_code_blocks(string $code, int $lineNumber, string|null $expectedExceptionMessage = null): void
     {
         if (self::$previousNamespace !== null && str_starts_with(trim($code), '// ...')) {
             $namespace = self::$previousNamespace;
