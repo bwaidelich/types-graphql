@@ -76,7 +76,7 @@ final class GraphQLGeneratorTest extends TestCase
     public function test_generate_throws_exception_if_specified_class_does_not_exist(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->generator->generate('NonExistingClass');
+        $this->generator->generate('NonExistingClass'); // @phpstan-ignore-line
     }
 
     public function test_generate_throws_exception_if_specified_class_does_not_contain_query_or_mutation_methods(): void
@@ -210,22 +210,22 @@ final class GraphQLGeneratorTest extends TestCase
             type Query {
               someQuery(in: SomeOtherShapeInput!): ClassWithRecursion!
             }
-            
+
             enum Title {
               MR
               MRS
               OTHER
             }
-            
+
             input SomeOtherShapeInput {
               title: Title!
             }
-            
+
             type SubClassWithRecursion {
               name: String!
               parentClass: ClassWithRecursion!
             }
-            
+
             type ClassWithRecursion {
               name: String!
               subClass: SubClassWithRecursion!
@@ -235,17 +235,20 @@ final class GraphQLGeneratorTest extends TestCase
         self::assertSame($expected, $graphQLSchema->render());
     }
 
+    /**
+     * @return iterable<mixed>
+     */
     public static function dataProvider_invalid_custom_resolvers(): iterable
     {
         yield 'missing first parameter' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (): bool => true), 'expectedException' => 'Custom resolver "custom" for type "SomeOtherShape" must expect an instance of SomeOtherShape as first argument, but the resolver has no arguments'];
         yield 'invalid first parameter type (simple type)' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (int $x): string => 'foo'), 'expectedException' => 'Custom resolver "custom" for type "SomeOtherShape" must expect an instance of SomeOtherShape as first argument, but the first argument is of type int'];
         yield 'invalid first parameter type (stdClass)' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (stdClass $title): string => $title->name), 'expectedException' => 'Failed to parse schema of first argument of custom resolver "custom" for type "SomeOtherShape": Missing constructor in class "stdClass"'];
-        yield 'invalid first parameter type (nonexisting class)' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (\NonExistingClass $title): string => $title->name), 'expectedException' => 'Failed to parse schema of first argument of custom resolver "custom" for type "SomeOtherShape": Failed to get schema for class "NonExistingClass" because that class does not exist'];
+        yield 'invalid first parameter type (nonexisting class)' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (\NonExistingClass $title): string => $title->name), 'expectedException' => 'Failed to parse schema of first argument of custom resolver "custom" for type "SomeOtherShape": Failed to get schema for class "NonExistingClass" because that class does not exist']; // @phpstan-ignore-line
         yield 'invalid first parameter type (existing class)' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (Title $title): string => $title->name), 'expectedException' => 'Custom resolver "custom" for type "SomeOtherShape" must expect an instance of SomeOtherShape as first argument, but the first argument is of type Title'];
         yield 'invalid first parameter type (union type)' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (string|int $title): int => 321), 'expectedException' => 'Custom resolver "custom" for type "SomeOtherShape" must expect an instance of SomeOtherShape as first argument, got ReflectionUnionType'];
         yield 'invalid 2nd parameter type (union type)' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (SomeOtherShape $shape, string|int $foo): int => 321), 'expectedException' => 'Failed to parse argument of custom resolver "custom" for type "SomeOtherShape": Expected an instance of ReflectionNamedType. Got: ReflectionUnionType'];
         yield 'missing return type' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (SomeOtherShape $shape) => 123), 'expectedException' => 'Return type of custom resolver "custom" for type "SomeOtherShape" is missing'];
-        yield 'invalid return type (union type)' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (SomeOtherShape $shape): string|int => 123), 'expectedException' => 'Return type of custom resolver "custom" for type "SomeOtherShape" was expected to be of type ReflectionNamedType. Got: ReflectionUnionType'];
+        yield 'invalid return type (union type)' => ['customResolver' => new CustomResolver('SomeOtherShape', 'custom', fn (SomeOtherShape $shape): int|string => 123), 'expectedException' => 'Return type of custom resolver "custom" for type "SomeOtherShape" was expected to be of type ReflectionNamedType. Got: ReflectionUnionType']; // @phpstan-ignore return.unusedType
     }
 
     #[dataProvider('dataProvider_invalid_custom_resolvers')]
@@ -272,17 +275,17 @@ final class GraphQLGeneratorTest extends TestCase
             type Query {
               someQuery(in: SomeOtherShapeInput!): SomeOtherShape!
             }
-            
+
             enum Title {
               MR
               MRS
               OTHER
             }
-            
+
             input SomeOtherShapeInput {
               title: Title!
             }
-            
+
             type SomeOtherShape {
               title: Title!
               """ Some custom resolver description """
@@ -338,13 +341,15 @@ final class ClassWithQueryAndInvalidType {
     #[Query]
     public function someQuery(SomeOtherShape $in): ClassInvalidProperty
     {
+        return null; // @phpstan-ignore return.type
     }
 }
 
 final class ClassWithQueryAndInvalidInterfaceType {
     #[Query]
-    public function someQuery(SomeOtherShape $in): ClassInvalidInterfaceProperty
+    public function someQuery(SomeOtherShape $in): ClassInvalidInterfaceProperty // @phpstan-ignore class.notFound
     {
+        return null; // @phpstan-ignore return.type
     }
 }
 
@@ -352,6 +357,7 @@ final class ClassWithQueryAndRecursiveType {
     #[Query]
     public function someQuery(SomeOtherShape $in): ClassWithRecursion
     {
+        return null; // @phpstan-ignore return.type
     }
 }
 
@@ -360,6 +366,7 @@ final class ClassWithQueries {
     #[Query]
     public function someQuery(SomeOtherShape $in): SomeOtherShape
     {
+        return null; // @phpstan-ignore return.type
     }
 }
 
@@ -367,25 +374,29 @@ final class ClassWithQueriesAndMutations {
 
     #[Query]
     #[Description('Some query description')]
-    public function someQuery(#[Description('some overridden number description (TODO: is ignored currently)')] SomeNumbers $numbers = null): Date
+    public function someQuery(#[Description('some overridden number description (TODO: is ignored currently)')] SomeNumbers|null $numbers = null): Date
     {
+        return null; // @phpstan-ignore return.type
     }
 
     #[Query]
     public function someOtherQuery(Title $theTitle): ?Severity
     {
+        return null;
     }
 
     #[Query]
     public function instruments(): Instruments
     {
-        return instantiate(SomeNumbersOrStrings::class, [['__type' => SomeNumber::class, '__value' => 123], ['__type' => SomeString::class, '__value' => 'foo']]);
+        // @phpstan-ignore class.notFound, class.notFound
+        return instantiate(SomeNumbersOrStrings::class, [['__type' => SomeNumber::class, '__value' => 123], ['__type' => SomeString::class, '__value' => 'foo']]); // @phpstan-ignore return.type
     }
 
     #[Mutation]
     #[Description('Some mutation description')]
     public function someMutation(SomeShape $shape, bool $optionalBool = true): ?SomeNumbers
     {
+        return null;
     }
 }
 
@@ -396,13 +407,19 @@ final class SomeNumber {
 }
 
 #[ListBased(itemClassName: SomeNumber::class, minCount: 1, maxCount: 5)]
-final class SomeNumbers {
+final class SomeNumbers
+{
+    /**
+     * @param array<mixed> $numbers
+     */
+    // @phpstan-ignore property.onlyWritten
     private function __construct(private readonly array $numbers) {}
 }
 
 #[StringBased(minLength: 3, maxLength: 10, pattern: '\d{4}-\d{2}-\d{2}', format: StringTypeFormat::date)]
 #[Description('Some date description')]
-final class Date {
+final class Date
+{
     private function __construct(public readonly string $value) {}
 }
 
@@ -472,10 +489,15 @@ final class Guitar implements Instrument
 #[ListBased(itemClassName: Instrument::class, minCount: 0, maxCount: 5)]
 final class Instruments
 {
+    /**
+     * @param array<mixed> $instruments
+     * @phpstan-ignore property.onlyWritten
+     */
     private function __construct(private readonly array $instruments) {}
 }
 
 final class ClassInvalidProperty {
+    /** @phpstan-ignore constructor.unusedParameter  */
     public function __construct(
         ClassWithoutPublicProperties $invalidProperty,
     ) {}
@@ -487,14 +509,14 @@ final class ClassWithoutPublicProperties {
 
 final class ClassWithRecursion {
     public function __construct(
-        private readonly string $name,
-        private readonly SubClassWithRecursion $subClass
+        private readonly string $name, // @phpstan-ignore property.onlyWritten
+        private readonly SubClassWithRecursion $subClass // @phpstan-ignore property.onlyWritten
     ) {}
 }
 
 final class SubClassWithRecursion {
     public function __construct(
-        private readonly string $name,
-        private readonly ClassWithRecursion $parentClass
+        private readonly string $name, // @phpstan-ignore property.onlyWritten
+        private readonly ClassWithRecursion $parentClass // @phpstan-ignore property.onlyWritten
     ) {}
 }
