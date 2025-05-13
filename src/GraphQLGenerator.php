@@ -7,6 +7,7 @@ namespace Wwwision\TypesGraphQL;
 use InvalidArgumentException;
 use ReflectionAttribute;
 use ReflectionClass;
+use ReflectionException;
 use ReflectionFunction;
 use ReflectionMethod;
 use ReflectionNamedType;
@@ -74,7 +75,10 @@ final class GraphQLGenerator
     {
     }
 
-    public function generate(string $className, CustomResolvers $customResolvers = null): GraphQLSchema
+    /**
+     * @param class-string $className
+     */
+    public function generate(string $className, CustomResolvers|null $customResolvers = null): GraphQLSchema
     {
         $this->createdDefinitions = [];
         $this->customResolvers = $customResolvers ?? CustomResolvers::create();
