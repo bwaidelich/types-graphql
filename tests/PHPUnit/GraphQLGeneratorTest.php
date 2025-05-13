@@ -202,6 +202,39 @@ final class GraphQLGeneratorTest extends TestCase
         self::assertSame($expected, $graphQLSchema->render());
     }
 
+    public function test_schema_with_recursive_types(): void
+    {
+        $graphQLSchema = $this->generator->generate(ClassWithQueryAndRecursiveType::class);
+
+        $expected = <<<GRAPHQL
+            type Query {
+              someQuery(in: SomeOtherShapeInput!): ClassWithRecursion!
+            }
+
+            enum Title {
+              MR
+              MRS
+              OTHER
+            }
+
+            input SomeOtherShapeInput {
+              title: Title!
+            }
+
+            type SubClassWithRecursion {
+              name: String!
+              parentClass: ClassWithRecursion!
+            }
+
+            type ClassWithRecursion {
+              name: String!
+              subClass: SubClassWithRecursion!
+            }
+
+            GRAPHQL;
+        self::assertSame($expected, $graphQLSchema->render());
+    }
+
     /**
      * @return iterable<mixed>
      */
@@ -242,17 +275,17 @@ final class GraphQLGeneratorTest extends TestCase
             type Query {
               someQuery(in: SomeOtherShapeInput!): SomeOtherShape!
             }
-            
+
             enum Title {
               MR
               MRS
               OTHER
             }
-            
+
             input SomeOtherShapeInput {
               title: Title!
             }
-            
+
             type SomeOtherShape {
               title: Title!
               """ Some custom resolver description """
@@ -315,6 +348,14 @@ final class ClassWithQueryAndInvalidType {
 final class ClassWithQueryAndInvalidInterfaceType {
     #[Query]
     public function someQuery(SomeOtherShape $in): ClassInvalidInterfaceProperty // @phpstan-ignore class.notFound
+    {
+        return null; // @phpstan-ignore return.type
+    }
+}
+
+final class ClassWithQueryAndRecursiveType {
+    #[Query]
+    public function someQuery(SomeOtherShape $in): ClassWithRecursion
     {
         return null; // @phpstan-ignore return.type
     }
@@ -464,4 +505,18 @@ final class ClassInvalidProperty {
 
 final class ClassWithoutPublicProperties {
     public function __construct() {}
+}
+
+final class ClassWithRecursion {
+    public function __construct(
+        private readonly string $name, // @phpstan-ignore property.onlyWritten
+        private readonly SubClassWithRecursion $subClass // @phpstan-ignore property.onlyWritten
+    ) {}
+}
+
+final class SubClassWithRecursion {
+    public function __construct(
+        private readonly string $name, // @phpstan-ignore property.onlyWritten
+        private readonly ClassWithRecursion $parentClass // @phpstan-ignore property.onlyWritten
+    ) {}
 }
