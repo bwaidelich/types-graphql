@@ -228,6 +228,7 @@ final class GraphQLGeneratorTest extends TestCase
 
             type ClassWithRecursion {
               name: String!
+              self: ClassWithRecursion!
               subClass: SubClassWithRecursion!
             }
 
@@ -268,6 +269,8 @@ final class GraphQLGeneratorTest extends TestCase
             new CustomResolver('SomeOtherShape', 'customWithStringArgument', fn (SomeOtherShape $x, #[Description('Some custom argument description')] string $foo): bool => false),
             new CustomResolver('SomeOtherShape', 'customWithFloatArgument', fn (SomeOtherShape $x, #[Description('Some custom argument description')] float $foo): bool => false),
             new CustomResolver('SomeOtherShape', 'customWithObjectArguments', fn (SomeOtherShape $x, Title $title): Title => $title),
+            new CustomResolver('SomeOtherShape', 'customWithSelfReference', fn (SomeOtherShape $x): SomeOtherShape => $x),
+            new CustomResolver('SomeOtherShape', 'customWithSelfArgument', fn (SomeOtherShape $x, SomeOtherShape $y): bool => true),
         );
         $graphQLSchema = $this->generator->generate(ClassWithQueries::class, $customResolvers);
 
@@ -295,6 +298,8 @@ final class GraphQLGeneratorTest extends TestCase
               customWithStringArgument(foo: String!): Boolean!
               customWithFloatArgument(foo: Float!): Boolean!
               customWithObjectArguments(title: Title!): Title!
+              customWithSelfReference: SomeOtherShape!
+              customWithSelfArgument(y: SomeOtherShapeInput!): Boolean!
             }
 
             GRAPHQL;
@@ -510,6 +515,7 @@ final class ClassWithoutPublicProperties {
 final class ClassWithRecursion {
     public function __construct(
         private readonly string $name, // @phpstan-ignore property.onlyWritten
+        private readonly ClassWithRecursion $self, // @phpstan-ignore property.onlyWritten
         private readonly SubClassWithRecursion $subClass // @phpstan-ignore property.onlyWritten
     ) {}
 }

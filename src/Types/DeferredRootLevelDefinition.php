@@ -14,13 +14,14 @@ final class DeferredRootLevelDefinition implements RootLevelDefinition
      * @param Closure(): RootLevelDefinition $definitionResolver
      */
     public function __construct(
+        private readonly string $name,
         private readonly Closure $definitionResolver,
     ) {
     }
 
     public function getName(): string
     {
-        return $this->resolve()->getName();
+        return $this->name;
     }
 
     public function render(): string
