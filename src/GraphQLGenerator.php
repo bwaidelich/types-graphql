@@ -17,6 +17,7 @@ use Stringable;
 use Webmozart\Assert\Assert;
 use Wwwision\Types\Attributes\Description;
 use Wwwision\Types\Parser;
+use Wwwision\Types\Schema\DeferredSchema;
 use Wwwision\Types\Schema\EnumSchema;
 use Wwwision\Types\Schema\IntegerSchema;
 use Wwwision\Types\Schema\InterfaceSchema;
@@ -38,6 +39,7 @@ use Wwwision\TypesGraphQL\Types\ArgumentDefinitions;
 use Wwwision\TypesGraphQL\Types\Arguments;
 use Wwwision\TypesGraphQL\Types\ArgumentValue;
 use Wwwision\TypesGraphQL\Types\CustomResolvers;
+use Wwwision\TypesGraphQL\Types\DeferredRootLevelDefinition;
 use Wwwision\TypesGraphQL\Types\Directive;
 use Wwwision\TypesGraphQL\Types\DirectiveDefinition;
 use Wwwision\TypesGraphQL\Types\DirectiveLocation;
@@ -68,6 +70,11 @@ final class GraphQLGenerator
     private CustomResolvers $customResolvers;
 
     private bool $constraintDirectivesWhereAdded = false;
+
+    /**
+     * @var array<string, true>
+     */
+    private array $currentlyParsing = [];
 
     public function __construct()
     {
@@ -214,7 +221,14 @@ final class GraphQLGenerator
         if ($schema instanceof ListSchema) {
             $schema = $schema->itemSchema;
         }
-        $cacheId = $schema->getName() . ($schema instanceof ShapeSchema && $isInputType ? 'Input' : '');
+        $typeName = self::schemaTypeName($schema, $isInputType);
+        if (array_key_exists($typeName, $this->createdDefinitions)) {
+            return $this->createdDefinitions[$typeName];
+        }
+        if (array_key_exists($typeName, $this->currentlyParsing)) {
+            return new DeferredRootLevelDefinition($typeName, fn () => $this->createdDefinitions[$typeName]);
+        }
+        $this->currentlyParsing[$typeName] = true;
         $definition = match ($schema::class) {
             EnumSchema::class => $this->enumDefinition($schema),
             IntegerSchema::class,
@@ -227,9 +241,10 @@ final class GraphQLGenerator
             InterfaceSchema::class => $this->interfaceDefinition($schema),
             default => throw new RuntimeException(sprintf('Unsupported schema "%s" for type "%s"', get_debug_type($schema), $schema->getName()))
         };
-        if (!array_key_exists($cacheId, $this->createdDefinitions) && !in_array($schema::class, [LiteralBooleanSchema::class, LiteralIntegerSchema::class, LiteralStringSchema::class, LiteralFloatSchema::class], true)) {
-            $this->createdDefinitions[$cacheId] = $definition;
+        if (!array_key_exists($typeName, $this->createdDefinitions) && !in_array($schema::class, [LiteralBooleanSchema::class, LiteralIntegerSchema::class, LiteralStringSchema::class, LiteralFloatSchema::class], true)) {
+            $this->createdDefinitions[$typeName] = $definition;
         }
+        unset($this->currentlyParsing[$typeName]);
         return $definition;
     }
 
@@ -273,7 +288,7 @@ final class GraphQLGenerator
 
     private function shapeDefinition(ShapeSchema $schema, bool $isInputType): ObjectTypeDefinition
     {
-        $typeName = $schema->getName() . ($isInputType ? 'Input' : '');
+        $typeName = self::schemaTypeName($schema, $isInputType);
         $fieldDefinitions = $this->propertyFieldDefinitions($schema, $isInputType);
         foreach ($this->customResolvers->getAllForType($typeName) as $customResolver) {
             $customResolverReflection = new ReflectionFunction($customResolver->callback);
@@ -352,7 +367,7 @@ final class GraphQLGenerator
                 $propertyFieldType = new FieldType($propertyTypeDefinition->getName(), $required, true, $this->directives($propertySchema));
             } elseif ($propertySchema instanceof ShapeSchema && $isInputType) {
                 $this->typeDefinition($propertySchema, true);
-                $propertyFieldType = new FieldType($propertySchema->getName() . 'Input', $required);
+                $propertyFieldType = new FieldType(self::schemaTypeName($propertySchema, true), $required);
             } else {
                 $this->typeDefinition($propertySchema, $isInputType);
                 $propertyFieldType = new FieldType($propertySchema->getName(), $required);
@@ -453,5 +468,10 @@ final class GraphQLGenerator
         /** @var Description $instance */
         $instance = $descriptionAttributes[0]->newInstance();
         return $instance->value;
+    }
+
+    private static function schemaTypeName(Schema $schema, bool $isInputType): string
+    {
+        return $schema->getName() . ($schema instanceof ShapeSchema && $isInputType ? 'Input' : '');
     }
 }
